@@ -61,6 +61,9 @@ class Quadcopter():
         self.bound_y = 10.
         self.bound_z = 10.
 
+        # External force acting on the quadcopter
+        self.external_force = np.array([0., 0., 0.])  # [Fx, Fy, Fz], N
+
         # Vehicle constants
         self.num_motors = num_motors # number of motors on the vehicle
         self.mass = mass # total mass of the vehicle, kg
@@ -105,7 +108,13 @@ class Quadcopter():
         ''' Returns the error between angular velocity position and reference angular velocity'''
         ang_vel_error = self.ang_vel_ref - ang_vel
         return ang_vel_error
-
+    
+    def apply_external_force(self, force):
+        '''
+        Apply an external force to the quadcopter.
+        :param force: A numpy array [Fx, Fy, Fz] representing the force in Newtons.
+        '''
+        self.external_force = np.array(force)
 
     def body2inertial_rotation(self):
         ''' 
@@ -183,7 +192,11 @@ class Quadcopter():
         drag_inertial = np.matmul(R_B2I, drag_body)
         weight = self.mass * self.g
 
-        acc_inertial = (Thrust_inertial + drag_inertial + weight) / self.mass
+        # Add external force to the total force
+        total_force = Thrust_inertial + drag_inertial + weight + self.external_force
+
+        # compute linear acceleration
+        acc_inertial = total_force / self.mass
         self.lin_acc = acc_inertial
 
 

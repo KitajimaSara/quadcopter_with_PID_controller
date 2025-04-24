@@ -100,7 +100,16 @@ initialize_results(body_torque,3)
 
 
 # Simulation
-for time in enumerate(time_index):
+for idx, time in enumerate(time_index):
+
+    # Apply an external force
+    if 2 <= time <= 2.02:
+        external_force = [5, 0.0, 3]
+        quadcopter.apply_external_force(external_force)
+    else:
+        quadcopter.apply_external_force([0.0, 0.0, 0.0])
+
+
 
     #find position and velocity error and call positional controller
     pos_error = quadcopter.calc_pos_error(quadcopter.pos)
