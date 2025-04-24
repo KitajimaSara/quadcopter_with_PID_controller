@@ -201,7 +201,7 @@ class Quadcopter():
         # Thrust desired converted into motor speeds
         weight_speed = thrust_des / (n*self.kt)
 
-        # Thrust differene in each motor to achieve needed torque on body
+        # Thrust difference in each motor to achieve needed torque on body
         motor_speeds = []
         motor_speeds.append(weight_speed - (e2/((n/2)*self.kt*self.L)) - (e3/(n*self.b_prop)))
         motor_speeds.append(weight_speed - (e1/((n/2)*self.kt*self.L)) + (e3/(n*self.b_prop)))
