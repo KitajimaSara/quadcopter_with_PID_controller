@@ -5,9 +5,10 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import math
 
-# Import custom quadcopter and controller classes
+# Import custom quadcopter and controller classes and other modules
 from Quadcopter import Quadcopter
 from PID_Controller import PID_Controller
+from Line_Intersect_3D import lineIntersect3D
 
 #sim run time
 sim_start = 0 #start time of simulation
@@ -81,9 +82,98 @@ initialize_results(body_torque,3)
 # Tether-related parameters
 tether_max_length = 10.0  # maximum length of the tether in meters
 init_min_height = 2.0  # minimum height of the initial height of quadcopter in meters
+min_height = 1.5  # minimum height of the quadcopter in meters
 winding_speed = 0.05  # speed of the tether winding in m/s
 force_apply_time = 0.02  # duration of the force application in seconds
 force_apply_magnitude = quadcopter.mass * winding_speed / force_apply_time  # force applied to the quadcopter due to tether winding in N
+class Tethering_Point:
+    '''
+    This class represents the tethering point of the quadcopter in inertial frame. 
+    It is used to save the position and vector of the tethering situation.
+    '''
+    def __init__(self):
+        self.point = []
+
+    def add_point(self, position, vector):
+        '''
+        This function adds a point to the tethering point.
+        '''
+        self.point.append((position, vector))
+
+    def get_point(self, idx):
+        '''
+        This function returns the point at the given index.
+        '''
+        return self.point[idx]
+    
+    def get_position(self, idx):
+        '''
+        This function returns the position of the tethering point.
+        '''
+        return self.point[idx][0]
+    
+    def get_vector(self, idx):
+        '''
+        This function returns the vector of the tethering point.
+        '''
+        return self.point[idx][1]
+    
+    def get_all_points(self):
+        '''
+        This function returns all the points of the tethering point.
+        '''
+        return self.point
+tethering_point = Tethering_Point() # create an Tethering_Point class data to save the tethering point data
+
+def calculate_landing_anchor_estimate():
+    '''
+    This function calculates the estimated position of the landing anchor. 
+    The landing anchor is the point on the ground that is tethered to the quadcopter.
+    '''
+    # Get all tethering points data
+    start_point = []
+    end_point = []
+    if len(tethering_point.point) > 1:
+        # Get all points
+        for i in range(len(tethering_point.point)):
+            # Get the point and vector
+            start_point.append(tethering_point.get_point(i))
+            end_point.append(tethering_point.get_point(i) + tethering_point.get_vector(i))
+    if start_point != [] and end_point != []:
+        intersect_point, distances = lineIntersect3D(start_point, end_point)
+    else:
+        intersect_point = []
+    return intersect_point
+
+def generate_next_tethering_point():
+    '''
+    This function generates the next tethering point. 
+    The tethering point is the point in the inertial frame that the quadcopter receive tethering force.
+    '''
+    # if the number of existing tethering point < 2, generate the point specifically
+    if len(tethering_point.point) < 2:
+        while True:
+            # Generate a random point in the inertial frame
+            prev_point = tethering_point.get_position(0) if len(tethering_point.point) > 0 else [0, 0, 0]
+            x = np.random.uniform(-tether_max_length * 0.3 + prev_point[0], tether_max_length * 0.3 + prev_point[0])
+            y = np.random.uniform(-tether_max_length * 0.3 + prev_point[1], tether_max_length * 0.3 + prev_point[1])
+            z = np.random.uniform(prev_point[2], tether_max_length * 0.3 + prev_point[2])
+            p = [x - prev_point[0], y - prev_point[1], z - prev_point[2]]
+            if tether_max_length * 0.1 < np.linalg.norm(p) <= tether_max_length * 0.3:
+                return [x, y, z]
+    # if the number of existing tethering point >= 2, generate the point refering to the landing point
+    if len(tethering_point.point) > 1:
+        prev_point = tethering_point.get_position(-1)
+        landing_pos_est = calculate_landing_anchor_estimate()
+        while True:
+            # Generate a random point in the inertial frame
+            x = np.random.uniform(-tether_max_length * 0.3 + prev_point[0], tether_max_length * 0.3 + prev_point[0])
+            y = np.random.uniform(-tether_max_length * 0.3 + prev_point[1], tether_max_length * 0.3 + prev_point[1])
+            z = np.random.uniform(-tether_max_length * 0.3 + prev_point[2], tether_max_length * 0.3 + prev_point[2])
+            p1 = [x - prev_point[0], y - prev_point[1], z - prev_point[2]]
+            p2 = [x - landing_pos_est[0], y - landing_pos_est[1], z - landing_pos_est[2]]
+            if tether_max_length * 0.1 < np.linalg.norm(p1) <= tether_max_length * 0.3 and np.linalg.norm(p2) <= tether_max_length * 0.9 and p2[2] > min_height:
+                return [x, y, z]
 
 def initialize_landing_anchor_position():
     ''' 
@@ -100,6 +190,24 @@ def initialize_landing_anchor_position():
             return p
 
 landing_pos_ref = initialize_landing_anchor_position() # landing anchor position [x, y, z] in inertial frame - meters
+
+def calculate_tether_force(force_magnitude, quadcopter_pos):
+    ''' 
+    This function calculates the force applied to the quadcopter due to the tether winding.
+    The force is applied in the direction of the tether vector.
+    '''
+    # Calculate the tether vector
+    tether_vector = np.array(quadcopter_pos - landing_pos_ref)
+    # Calculate the length of the tether
+    tether_length = np.linalg.norm(tether_vector)
+    # Normalize the tether vector
+    if tether_length > 0:
+        unit_tether_vector = tether_vector / tether_length
+        # Calculate the force vector
+        force_vector = -force_magnitude * unit_tether_vector
+        return force_vector
+    else:
+        return np.array([0.0, 0.0, 0.0])  # No force if the quadcopter is at the anchor point
 
 
 
