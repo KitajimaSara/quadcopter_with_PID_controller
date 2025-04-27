@@ -38,7 +38,7 @@ class Quadcopter():
         self.angle = angle # orintation of vehicle inertial frame in radians [roll, pitch, yaw] -> [phi, theta, psi]
         self.ang_vel = ang_vel # angular velocity of inertial angles in rads/sec [phi_dot, theta_dot, psi_dot]
         self.lin_acc = np.array([0., 0., 0.]) # linear acceleration of vehicle in inertial frame [d^2(x)/dt, d^2(y)/dt, d^2(z)/dt], m/s^2
-        self.ang_acc = np.array([0., 0., 0.]) #angular acceleration of vehicle in inertial frame [d^2(phi)/dt, d^2(theta)/dt, d^2(psi)/dt], rad/s^2
+        self.ang_acc = np.array([0., 0., 0.]) # angular acceleration of vehicle in inertial frame [d^2(phi)/dt, d^2(theta)/dt, d^2(psi)/dt], rad/s^2
 
         # Desired reference states
         self.pos_ref = pos_ref #desired position [x, y, z] in inertial frame, m
