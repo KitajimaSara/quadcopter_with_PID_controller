@@ -31,7 +31,7 @@ class Quadcopter():
         gravity = 9.8 # acceleration due to gravity, m/s^2
         num_motors = 4 # number of motors on the vehicle
         kt = 1e-7 # proportionality constant to convert motor rotational speed into thrust (T=kt*omega^2), N/(rpm)^2
-      
+
         # Initial Sim variables
         self.pos = pos  # position of vehicle in inertial frame [x,y,z], meters
         self.vel = vel  #velocity of vehicle in inertial frame [x_dot, y_dot, z_dot], m/s
@@ -63,6 +63,17 @@ class Quadcopter():
 
         # External force acting on the quadcopter
         self.external_force = np.array([0., 0., 0.])  # [Fx, Fy, Fz], N
+
+        # State of hovering, stable or not
+        self.is_hovering = False
+        self.is_stable = False
+        self.hovering_count = 0
+
+        # State if the force detector is on or off
+        self.force_detector_on = False
+        self.force_detector_prev_on = False
+
+        self.external_force_vector_estimate = np.array([0.0, 0.0, 0.0])
 
         # Vehicle constants
         self.num_motors = num_motors # number of motors on the vehicle
@@ -235,6 +246,35 @@ class Quadcopter():
         
         self.speeds = motor_speeds
 
+    def check_hovering_stable(self):
+        ''' Check if the quadcopter is hovering or stable'''
+        velocity_threshold = 0.1  # speed threshold (m/s)
+        angular_velocity_threshold = 0.1  # angle speed threshold (rad/s)
+        position_error_threshold = 0.1  # position error threshold (m)
+
+        # calculate the norms of velocity, angular velocity, and position error
+        vel_norm = np.linalg.norm(self.vel)
+        ang_vel_norm = np.linalg.norm(self.ang_vel)
+        pos_error_norm = np.linalg.norm(self.calc_pos_error(self.pos))
+
+        # decide if the quadcopter is hovering
+        if vel_norm < velocity_threshold and ang_vel_norm < angular_velocity_threshold and pos_error_norm < position_error_threshold:
+            self.is_hovering = True
+            self.hovering_count += 1
+        else:
+            self.is_hovering = False
+            self.hovering_count = 0
+        
+        # decide if the quadcopter is stable
+        if self.is_hovering and self.hovering_count >= 100:
+            self.is_stable = True
+        else:
+            self.is_stable = False
+
+    def force_detect(self):
+        force_now = self.lin_acc
+        if np.linalg.norm(force_now) > np.linalg.norm(self.external_force_vector_estimate):
+            self.external_force_vector_estimate = 0.1 * self.external_force_vector_estimate + 0.9 * force_now
 
     def find_body_torque(self):
         tau = np.array([(self.L * self.kt * (self.speeds[3] - self.speeds[1])),
@@ -267,4 +307,14 @@ class Quadcopter():
         self.vel += self.dt * self.lin_acc
         self.pos += self.dt * self.vel
         self.time += self.dt
+
+        self.check_hovering_stable()
+        if self.force_detector_on:
+            if self.force_detector_prev_on == False:
+                # Reset the external force vector estimate when the force detector is turned on
+                self.external_force_vector_estimate = np.array([0.0, 0.0, 0.0])
+            self.force_detect()
+        self.force_detector_prev_on = self.force_detector_on # remember the previous state of the force detector
+
+            
 

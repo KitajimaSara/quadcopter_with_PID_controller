@@ -12,15 +12,15 @@ from Line_Intersect_3D import lineIntersect3D
 
 #sim run time
 sim_start = 0 #start time of simulation
-sim_end = 15 #end time of simulation in sec
+sim_end = 120 #end time of simulation in sec
 dt = 0.01 #step size in sec
 time_index = np.arange(sim_start, sim_end + dt, dt)
 
 # Initial conditions
-r_ref = np.array([0., 0., 3.]) # desired position [x, y, z] in inertial frame - meters
+r_ref = np.array([0., 0., 0.]) # desired position [x, y, z] in inertial frame - meters
 
-#initial conditions
-pos = [0.5, -0.5, 0.] # starting location [x, y, z] in inertial frame - meters
+# initial conditions
+pos = [0., 0., 0.] # starting location [x, y, z] in inertial frame - meters
 vel = np.array([0., 0., 0.]) #initial velocity [x; y; z] in inertial frame - m/s
 ang = np.array([0., 0., 0.]) #initial Euler angles [phi, theta, psi] relative to inertial frame in deg
 
@@ -140,6 +140,8 @@ def calculate_landing_anchor_estimate():
             start_point.append(tethering_point.get_point(i))
             end_point.append(tethering_point.get_point(i) + tethering_point.get_vector(i))
     if start_point != [] and end_point != []:
+        start_point = np.array(start_point)
+        end_point = np.array(end_point)
         intersect_point, distances = lineIntersect3D(start_point, end_point)
     else:
         intersect_point = []
@@ -209,11 +211,138 @@ def calculate_tether_force(force_magnitude, quadcopter_pos):
     else:
         return np.array([0.0, 0.0, 0.0])  # No force if the quadcopter is at the anchor point
 
+apply_force_flag = False
+force_timer = 0.0
+force_apply_duration = force_apply_time  # 已经在文件里有定义
+anchor_estimates = []
+anchor_estimates_idx = []
+
 
 
 # Simulation
 for idx, time in enumerate(time_index):
-    print("Time: ", time)
+    
+    #find position and velocity error and call positional controller
+    pos_error = quadcopter.calc_pos_error(quadcopter.pos)
+    vel_error = quadcopter.calc_vel_error(quadcopter.vel)
+    des_acc = pos_controller.control_update(pos_error,vel_error)
+
+    #Modify z gain to include thrust required to hover
+    des_acc[2] = (gravity + des_acc[2])/(math.cos(quadcopter.angle[0]) * math.cos(quadcopter.angle[1]))
+    
+    #calculate thrust needed  
+    thrust_needed = quadcopter.mass * des_acc[2]
+
+    #Check if needed acceleration is not zero. if zero, set to one to prevent divide by zero below
+    mag_acc = np.linalg.norm(des_acc)
+    if mag_acc == 0:
+        mag_acc = 1
+    
+    #use desired acceleration to find desired angles since the quad can only move via changing angles
+    ang_des = [math.asin(-des_acc[1] / mag_acc / math.cos(quadcopter.angle[1])),
+        math.asin(des_acc[0] / mag_acc),
+         0]
+
+    #check if exceeds max angle
+    mag_angle_des = np.linalg.norm(ang_des)
+    if mag_angle_des > quadcopter.max_angle:
+        ang_des = (ang_des / mag_angle_des) * quadcopter.max_angle
+
+    #call angle controller
+    quadcopter.angle_ref = ang_des
+    ang_error = quadcopter.calc_ang_error(quadcopter.angle)
+    ang_vel_error = quadcopter.calc_ang_vel_error(quadcopter.ang_vel)
+    tau_needed = angle_controller.control_update(ang_error, ang_vel_error)
+
+    #Find motor speeds needed to achieve desired linear and angular accelerations
+    quadcopter.des2speeds(thrust_needed, tau_needed)
+
+    # Step in time and update quadcopter attributes
+    quadcopter.step()
+
+
+    # landing point estimation
+    
+    # 先检查无人机是否稳定
+    if quadcopter.is_stable and not apply_force_flag:
+        # 记录当前稳定位置
+        stable_position = quadcopter.pos.copy()
+
+        # 根据当前位置计算需要施加的外力方向
+        force_vector = calculate_tether_force(force_apply_magnitude, quadcopter.pos)
+
+        # 施加外力
+        quadcopter.apply_external_force(force_vector)
+
+        # 开启力检测
+        quadcopter.force_detector_on = True
+
+        # 开始计时
+        apply_force_flag = True
+        force_timer = 0.0
+
+    elif apply_force_flag:
+        force_timer += dt
+
+        # 到达施力时间，停止施力
+        if force_timer >= force_apply_duration:
+            # 取消外力
+            quadcopter.apply_external_force(np.array([0., 0., 0.]))
+
+            # 关闭力检测
+            quadcopter.force_detector_on = False
+
+            # 存储施力时检测到的外力方向
+            estimated_force_vector = quadcopter.external_force_vector_estimate.copy()
+
+            tethering_point.add_point(stable_position, estimated_force_vector)
+
+            # 更新锚点估计
+            anchor_estimate = calculate_landing_anchor_estimate()
+            if len(anchor_estimate) != 0:
+                anchor_estimates.append(anchor_estimate)
+                anchor_estimates_idx.append(len(anchor_estimates_idx))
+
+            # 生成下一个飞行目标点
+            next_tether_point = generate_next_tethering_point()
+            quadcopter.pos_ref = np.array(next_tether_point)
+
+            # 重置状态
+            apply_force_flag = False
+
+    # Record key attributes for plotting
+    position_total.append(np.linalg.norm(quadcopter.pos))
+
+    position[0].append(quadcopter.pos[0])
+    position[1].append(quadcopter.pos[1])
+    position[2].append(quadcopter.pos[2])
+
+    velocity[0].append(quadcopter.vel[0])
+    velocity[1].append(quadcopter.vel[1])
+    velocity[2].append(quadcopter.vel[2])
+
+    angle[0].append(np.rad2deg(quadcopter.angle[0]))
+    angle[1].append(np.rad2deg(quadcopter.angle[1]))
+    angle[2].append(np.rad2deg(quadcopter.angle[2]))
+
+    angle_vel[0].append(np.rad2deg(quadcopter.ang_vel[0]))
+    angle_vel[1].append(np.rad2deg(quadcopter.ang_vel[1]))
+    angle_vel[2].append(np.rad2deg(quadcopter.ang_vel[2]))
+
+    motor_thrust[0].append(quadcopter.speeds[0]*quadcopter.kt)
+    motor_thrust[1].append(quadcopter.speeds[1]*quadcopter.kt)
+    motor_thrust[2].append(quadcopter.speeds[2]*quadcopter.kt)
+    motor_thrust[3].append(quadcopter.speeds[3]*quadcopter.kt)
+
+    body_torque[0].append(quadcopter.tau[0])
+    body_torque[1].append(quadcopter.tau[1])
+    body_torque[2].append(quadcopter.tau[2])
+
+    total_thrust.append(quadcopter.kt * np.sum(quadcopter.speeds))
+
+    # Positional error
+    r_error = quadcopter.pos_ref - quadcopter.pos
+    total_error.append(np.linalg.norm(r_error))
 
 
 
@@ -364,6 +493,34 @@ def total_plot():
     
 
 write_init_ang_vel_to_screen()
+
+def plot_anchor_estimates():
+    '''Plot the estimated anchor points compared with true anchor point'''
+    anchor_estimates_arr = np.array(anchor_estimates)
+    true_anchor = np.array(landing_pos_ref)
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+
+    if anchor_estimates_arr.shape[0] > 0:
+        ax.scatter(anchor_estimates_arr[:,0], anchor_estimates_arr[:,1], anchor_estimates_arr[:,2], c='b', label='Estimated Anchors')
+
+    ax.scatter(true_anchor[0], true_anchor[1], true_anchor[2], c='r', label='True Anchor', marker='^', s=100)
+
+    for idx, (x, y, z) in enumerate(anchor_estimates_arr):
+        ax.text(x, y, z, f'{idx}', size=8, zorder=1, color='k')  # 标上编号
+
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+    ax.set_title('Estimated vs True Landing Anchor Points')
+    ax.legend()
+    plt.show()
+
+# 仿真结束后调用
+plot_anchor_estimates()
+
+
 #error_plot()
 #simple_plot()
 total_plot()
