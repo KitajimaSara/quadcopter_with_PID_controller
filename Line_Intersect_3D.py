@@ -14,6 +14,7 @@ def lineIntersect3D(PA,PB):
 	Si = PB - PA #N lines described as vectors
 	t1=np.sqrt(np.sum(Si*Si,axis=1))
 	ni = Si /  np.transpose(t1*np.ones((3,1)))
+	# ni = Si / t1[:, np.newaxis]
 	nx = ni[:,0]; ny = ni[:,1]; nz = ni[:,2]
 	SXX = np.sum(nx*nx-1)
 	SYY = np.sum(ny*ny-1)

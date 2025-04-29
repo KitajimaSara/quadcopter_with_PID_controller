@@ -12,7 +12,7 @@ from Line_Intersect_3D import lineIntersect3D
 
 #sim run time
 sim_start = 0 #start time of simulation
-sim_end = 120 #end time of simulation in sec
+sim_end = 300 #end time of simulation in sec
 dt = 0.01 #step size in sec
 time_index = np.arange(sim_start, sim_end + dt, dt)
 
@@ -80,7 +80,7 @@ initialize_results(body_torque,3)
 
 
 # Tether-related parameters
-tether_max_length = 10.0  # maximum length of the tether in meters
+tether_max_length = 5.0  # maximum length of the tether in meters
 init_min_height = 2.0  # minimum height of the initial height of quadcopter in meters
 min_height = 1.5  # minimum height of the quadcopter in meters
 winding_speed = 0.05  # speed of the tether winding in m/s
@@ -125,23 +125,45 @@ class Tethering_Point:
         return self.point
 tethering_point = Tethering_Point() # create an Tethering_Point class data to save the tethering point data
 
+# def calculate_landing_anchor_estimate():
+#     '''
+#     This function calculates the estimated position of the landing anchor. 
+#     The landing anchor is the point on the ground that is tethered to the quadcopter.
+#     '''
+#     # Get all tethering points data
+#     start_point = []
+#     end_point = []
+#     if len(tethering_point.point) > 1:
+#         # Get all points
+#         for i in range(len(tethering_point.point)):
+#             # Get the point and vector
+#             start_point.append(tethering_point.get_point(i))
+#             end_point.append(tethering_point.get_point(i) + tethering_point.get_vector(i))
+#     if start_point != [] and end_point != []:
+#         start_point = np.array(start_point)
+#         end_point = np.array(end_point)
+#         intersect_point, distances = lineIntersect3D(start_point, end_point)
+#     else:
+#         intersect_point = []
+#     return intersect_point
+
 def calculate_landing_anchor_estimate():
     '''
     This function calculates the estimated position of the landing anchor. 
     The landing anchor is the point on the ground that is tethered to the quadcopter.
     '''
-    # Get all tethering points data
     start_point = []
     end_point = []
     if len(tethering_point.point) > 1:
-        # Get all points
         for i in range(len(tethering_point.point)):
-            # Get the point and vector
-            start_point.append(tethering_point.get_point(i))
-            end_point.append(tethering_point.get_point(i) + tethering_point.get_vector(i))
-    if start_point != [] and end_point != []:
+            start = np.array(tethering_point.get_position(i))
+            vector = np.array(tethering_point.get_vector(i))
+            start_point.append(start)
+            end_point.append(start + vector)
+        
         start_point = np.array(start_point)
         end_point = np.array(end_point)
+
         intersect_point, distances = lineIntersect3D(start_point, end_point)
     else:
         intersect_point = []
@@ -494,33 +516,90 @@ def total_plot():
 
 write_init_ang_vel_to_screen()
 
-def plot_anchor_estimates():
-    '''Plot the estimated anchor points compared with true anchor point'''
+# def plot_anchor_estimates():
+#     '''Plot the estimated anchor points compared with true anchor point'''
+#     anchor_estimates_arr = np.array(anchor_estimates)
+#     true_anchor = np.array(landing_pos_ref)
+
+#     fig = plt.figure()
+#     ax = fig.add_subplot(111, projection='3d')
+
+#     if anchor_estimates_arr.shape[0] > 0:
+#         ax.scatter(anchor_estimates_arr[:,0], anchor_estimates_arr[:,1], anchor_estimates_arr[:,2], c='b', label='Estimated Anchors')
+
+#     ax.scatter(true_anchor[0], true_anchor[1], true_anchor[2], c='r', label='True Anchor', marker='^', s=100)
+
+#     for idx, (x, y, z) in enumerate(anchor_estimates_arr):
+#         ax.text(x, y, z, f'{idx}', size=8, zorder=1, color='k')  # 标上编号
+
+#     ax.set_xlabel('X')
+#     ax.set_ylabel('Y')
+#     ax.set_zlabel('Z')
+#     ax.set_title('Estimated vs True Landing Anchor Points')
+#     ax.legend()
+#     plt.show()
+
+# # 仿真结束后调用
+# plot_anchor_estimates()
+
+def plot_results_combined():
+    '''Plot the results: anchor estimates, flight path, error over time'''
     anchor_estimates_arr = np.array(anchor_estimates)
     true_anchor = np.array(landing_pos_ref)
 
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
+    fig = plt.figure(figsize=(14,10))
 
+    # 3D飞行轨迹
+    ax1 = fig.add_subplot(2, 2, 1, projection='3d')
+    ax1.plot(position[0], position[1], position[2], label='Flight Path')
+    ax1.scatter(true_anchor[0], true_anchor[1], true_anchor[2], c='r', marker='^', s=80, label='True Anchor')
+    ax1.set_title('3D Flight Path')
+    ax1.set_xlabel('X (m)')
+    ax1.set_ylabel('Y (m)')
+    ax1.set_zlabel('Z (m)')
+    ax1.legend()
+
+    # 锚点估计散点图
+    ax2 = fig.add_subplot(2, 2, 2, projection='3d')
     if anchor_estimates_arr.shape[0] > 0:
-        ax.scatter(anchor_estimates_arr[:,0], anchor_estimates_arr[:,1], anchor_estimates_arr[:,2], c='b', label='Estimated Anchors')
-
-    ax.scatter(true_anchor[0], true_anchor[1], true_anchor[2], c='r', label='True Anchor', marker='^', s=100)
+        ax2.scatter(anchor_estimates_arr[:,0], anchor_estimates_arr[:,1], anchor_estimates_arr[:,2], c='b', label='Estimated Anchors')
+    ax2.scatter(true_anchor[0], true_anchor[1], true_anchor[2], c='r', marker='^', s=80, label='True Anchor')
 
     for idx, (x, y, z) in enumerate(anchor_estimates_arr):
-        ax.text(x, y, z, f'{idx}', size=8, zorder=1, color='k')  # 标上编号
+        ax2.text(x, y, z, f'{idx}', size=8, color='k')  # 编号标记
 
-    ax.set_xlabel('X')
-    ax.set_ylabel('Y')
-    ax.set_zlabel('Z')
-    ax.set_title('Estimated vs True Landing Anchor Points')
-    ax.legend()
+    ax2.set_title('Anchor Estimates')
+    ax2.set_xlabel('X (m)')
+    ax2.set_ylabel('Y (m)')
+    ax2.set_zlabel('Z (m)')
+    ax2.legend()
+
+    # 锚点估计误差变化曲线
+    ax3 = fig.add_subplot(2, 2, 3)
+    error_list = []
+    for est in anchor_estimates:
+        err = np.linalg.norm(est - true_anchor)
+        error_list.append(err)
+    
+    if len(error_list) > 0:
+        ax3.plot(anchor_estimates_idx, error_list, marker='o')
+        ax3.set_title('Anchor Estimate Error Over Iterations')
+        ax3.set_xlabel('Estimation Step')
+        ax3.set_ylabel('Estimation Error (m)')
+        ax3.grid(True)
+
+    # 飞行高度变化
+    ax4 = fig.add_subplot(2, 2, 4)
+    ax4.plot(time_index, position[2])
+    ax4.set_title('Altitude Over Time')
+    ax4.set_xlabel('Time (s)')
+    ax4.set_ylabel('Altitude (m)')
+    ax4.grid(True)
+
+    plt.tight_layout()
     plt.show()
 
-# 仿真结束后调用
-plot_anchor_estimates()
-
-
+plot_results_combined()
 #error_plot()
 #simple_plot()
 total_plot()

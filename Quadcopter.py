@@ -266,7 +266,7 @@ class Quadcopter():
             self.hovering_count = 0
         
         # decide if the quadcopter is stable
-        if self.is_hovering and self.hovering_count >= 100:
+        if self.is_hovering and self.hovering_count >= 150:
             self.is_stable = True
         else:
             self.is_stable = False
