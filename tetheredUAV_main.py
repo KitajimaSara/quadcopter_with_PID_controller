@@ -13,7 +13,7 @@ from Line_Intersect_3D import lineIntersect3D
 #sim run time
 sim_start = 0 #start time of simulation
 sim_end = 300 #end time of simulation in sec
-dt = 0.01 #step size in sec
+dt = 0.005 #step size in sec
 time_index = np.arange(sim_start, sim_end + dt, dt)
 
 # Initial conditions

@@ -266,7 +266,7 @@ class Quadcopter():
             self.hovering_count = 0
         
         # decide if the quadcopter is stable
-        if self.is_hovering and self.hovering_count >= 150:
+        if self.is_hovering and self.hovering_count >= 300:
             self.is_stable = True
         else:
             self.is_stable = False
@@ -274,7 +274,7 @@ class Quadcopter():
     def force_detect(self):
         force_now = self.lin_acc
         if np.linalg.norm(force_now) > np.linalg.norm(self.external_force_vector_estimate):
-            self.external_force_vector_estimate = 0.1 * self.external_force_vector_estimate + 0.9 * force_now
+            self.external_force_vector_estimate = 0.0 * self.external_force_vector_estimate + 1.0 * force_now
 
     def find_body_torque(self):
         tau = np.array([(self.L * self.kt * (self.speeds[3] - self.speeds[1])),
