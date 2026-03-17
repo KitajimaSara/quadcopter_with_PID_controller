@@ -83,7 +83,7 @@ initialize_results(body_torque,3)
 tether_max_length = 5.0  # maximum length of the tether in meters
 init_min_height = 2.0  # minimum height of the initial height of quadcopter in meters
 min_height = 1.5  # minimum height of the quadcopter in meters
-winding_speed = 0.05  # speed of the tether winding in m/s
+winding_speed = 0.03  # speed of the tether winding in m/s
 force_apply_time = 0.02  # duration of the force application in seconds
 force_apply_magnitude = quadcopter.mass * winding_speed / force_apply_time  # force applied to the quadcopter due to tether winding in N
 class Tethering_Point:
@@ -541,6 +541,54 @@ write_init_ang_vel_to_screen()
 
 # # 仿真结束后调用
 # plot_anchor_estimates()
+def plot_results_combined0():
+    """Plot only ax2 and ax3: anchor estimates + error over time"""
+    anchor_estimates_arr = np.array(anchor_estimates)
+    true_anchor = np.array(landing_pos_ref)
+
+    fig = plt.figure(figsize=(12, 5))
+
+    # ax2: 锚点估计散点图
+    ax2 = fig.add_subplot(1, 2, 1, projection='3d')
+    if anchor_estimates_arr.shape[0] > 0:
+        ax2.scatter(
+            anchor_estimates_arr[:, 0],
+            anchor_estimates_arr[:, 1],
+            anchor_estimates_arr[:, 2],
+            c='b',
+            label='Estimated Anchors'
+        )
+
+        for idx, (x, y, z) in enumerate(anchor_estimates_arr):
+            ax2.text(x, y, z, f'{idx}', size=8, color='k')  # 编号标记
+
+    ax2.scatter(
+        true_anchor[0], true_anchor[1], true_anchor[2],
+        c='r', marker='^', s=80, label='True Anchor'
+    )
+    ax2.set_title('Anchor Estimates')
+    ax2.set_xlabel('X (m)')
+    ax2.set_ylabel('Y (m)')
+    ax2.set_zlabel('Z (m)')
+    ax2.legend()
+
+    # ax3: 锚点估计误差变化曲线
+    ax3 = fig.add_subplot(1, 2, 2)
+    error_list = []
+    for est in anchor_estimates:
+        err = np.linalg.norm(est - true_anchor)
+        error_list.append(err)
+
+    if len(error_list) > 0:
+        ax3.plot(anchor_estimates_idx, error_list, marker='o')
+        ax3.set_title('Anchor Estimate Error Over Iterations')
+        ax3.set_xlabel('Estimation Step')
+        ax3.set_ylabel('Estimation Error (m)')
+        ax3.grid(True)
+
+    plt.tight_layout()
+    plt.show()
+
 
 def plot_results_combined():
     '''Plot the results: anchor estimates, flight path, error over time'''
@@ -599,6 +647,7 @@ def plot_results_combined():
     plt.tight_layout()
     plt.show()
 
+plot_results_combined0()
 plot_results_combined()
 #error_plot()
 #simple_plot()
